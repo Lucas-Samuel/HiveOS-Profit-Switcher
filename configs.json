@@ -1,15 +1,15 @@
 {
-  "api_key": "", // Your HiveOS api key
-  "farm_id": "", // ID of your farm in HiveOS
-  "coin_diference": "5", // How much percent the new coin should be more profitable
+  "api_key": "",
+  "farm_id": "",
+  "coin_diference": "5",
   "workers": [
     {
-      "name": "workerName", // The name of worker exactly like in HiveOS
-      "endpoint": "https://whattomine.com/coins.json...", // Your whattomine json with selected coins
+      "name": "",
+      "wtm_endpoint": "",
       "coins": [
         {
-          "ticker": "ETH", // Coin ticker
-          "fs": "ETH fs" // Flight sheet name exactly like in HiveOS
+          "tag": "",
+          "fs": ""
         }
       ]
     }

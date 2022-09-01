@@ -16,8 +16,8 @@ import (
 )
 
 type coinsProfit struct {
-	ticker string
-	profit float64
+	tag   string
+	value float64
 }
 
 type Configs struct {
@@ -28,14 +28,14 @@ type Configs struct {
 }
 
 type Workers []struct {
-	Name     string `json:"name"`
-	Endpoint string `json:"endpoint"`
-	Coins    Coins  `json:"coins"`
+	Name        string `json:"name"`
+	WtmEndpoint string `json:"wtm_endpoint"`
+	Coins       Coins  `json:"coins"`
 }
 
 type Coins []struct {
-	Ticker string `json:"ticker"`
-	Fs     string `json:"fs"`
+	Tag string `json:"tag"`
+	Fs  string `json:"fs"`
 }
 
 var configs Configs
@@ -71,42 +71,44 @@ func main() {
 	for _, value := range data {
 		worker := value.(map[string]interface{})
 
-		var workerKey int
+		var workerKey int = -1
 		for key, cw := range configs.Workers {
 			if cw.Name == worker["name"] {
 				workerKey = key
+				break
 			}
+		}
+
+		if workerKey < 0 {
+			log.Fatal("Worker \"" + worker["name"].(string) + "\" not found on config file")
 		}
 
 		config := configs.Workers[workerKey]
 		currentFs := worker["flight_sheet"].(map[string]interface{})
 
-		var fsKey int
+		var fsKey int = -1
 		for key, coin := range config.Coins {
 			if coin.Fs == currentFs["name"] {
 				fsKey = key
+				break
 			}
 		}
 
-		currentCoin := config.Coins[fsKey].Ticker
+		if fsKey < 0 {
+			log.Fatal("Flight sheet \"" + currentFs["name"].(string) + "\" not found on config file")
+		}
+
+		currentCoin := config.Coins[fsKey].Tag
 
 		resultBtc := request("https://api.coindesk.com/v1/bpi/currentprice.json")
 		btcPrice := resultBtc["bpi"].(map[string]interface{})["USD"].(map[string]interface{})["rate_float"].(float64)
 
-		WTMEndpoint := config.Endpoint
-		params, err := url.ParseQuery(WTMEndpoint)
+		WtmEndpoint := config.WtmEndpoint
+		params, _ := url.ParseQuery(WtmEndpoint)
 
-		if err != nil {
-			log.Fatal("Error when opening file: ", err)
-		}
+		powerCost, _ := strconv.ParseFloat(params["factor[cost]"][0], 32)
 
-		powerCost, err := strconv.ParseFloat(params["factor[cost]"][0], 32)
-
-		if err != nil {
-			log.Fatal("Error when opening file: ", err)
-		}
-
-		resultWTM := request(WTMEndpoint)
+		resultWTM := request(WtmEndpoint)
 		coins := resultWTM["coins"].(map[string]interface{})
 
 		var profits []coinsProfit
@@ -134,20 +136,20 @@ func main() {
 				key = coin["tag"].(string) + "-" + algo
 			}
 
-			profit := coinsProfit{ticker: key.(string), profit: dailyProfit}
+			profit := coinsProfit{tag: key.(string), value: dailyProfit}
 			profits = append(profits, profit)
 
-			if profit.ticker == currentCoin {
-				currentCoinPrice = profit.profit
+			if profit.tag == currentCoin {
+				currentCoinPrice = profit.value
 			}
 		}
 
 		sort.SliceStable(profits, func(i, j int) bool {
-			return profits[i].profit > profits[j].profit
+			return profits[i].value > profits[j].value
 		})
 
-		bestCoin := profits[0].ticker
-		bestCoinPrice := profits[0].profit
+		bestCoin := profits[0].tag
+		bestCoinPrice := profits[0].value
 
 		coinDiference, _ := strconv.ParseFloat(configs.CoinDiference, 32)
 
@@ -158,13 +160,18 @@ func main() {
 			os.Exit(0)
 		}
 
-		var newFsId float64
+		var newFsId float64 = -1
 		var newFsName string
 
 		for _, coin := range config.Coins {
-			if coin.Ticker == bestCoin {
+			if coin.Tag == bestCoin {
 				newFsName = coin.Fs
+				break
 			}
+		}
+
+		if newFsName == "" {
+			log.Fatal("flight Sheet not found for coin \"" + bestCoin + "\"")
 		}
 
 		result := requestHive("GET", "/farms/FARM_ID/fs", nil)
@@ -179,8 +186,8 @@ func main() {
 			}
 		}
 
-		if newFsId == 0 {
-			log.Fatal("flight Sheet not found")
+		if newFsId < 0 {
+			log.Fatal("flight Sheet \"" + newFsName + "\" not found on HiveOS")
 		}
 
 		payload, _ := json.Marshal(map[string]interface{}{
@@ -189,10 +196,8 @@ func main() {
 
 		requestHive("PATCH", "/farms/FARM_ID/workers/"+strconv.Itoa(int(worker["id"].(float64))), bytes.NewBuffer(payload))
 
-		fmt.Println("Flight Sheet updated to "+newFsName+". Estimated profit in 24h: $", bestCoinPrice)
-		os.Exit(0)
+		fmt.Println("Worker \""+worker["name"].(string)+"\" flight Sheet updated to \""+newFsName+"\". Estimated profit in 24h: $", bestCoinPrice)
 	}
-
 }
 
 func requestHive(method string, url string, payload io.Reader) map[string]interface{} {
