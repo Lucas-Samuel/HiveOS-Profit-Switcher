@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -44,17 +43,20 @@ func (configs *Configs) load() {
 	content, err := ioutil.ReadFile("configs.json")
 
 	if err != nil {
-		log.Fatal("Error when opening config file: ", err)
+		fmt.Println("Error when opening config file: ", err)
+		os.Exit(1)
 	}
 
 	json.Unmarshal([]byte(content), &configs)
 
 	if configs.APIKey == "" {
-		log.Fatal("API Key not set")
+		fmt.Println("API Key not set")
+		os.Exit(1)
 	}
 
 	if configs.FarmID == "" {
-		log.Fatal("Farm id not set")
+		fmt.Println("Farm id not set")
+		os.Exit(1)
 	}
 }
 
@@ -80,7 +82,8 @@ func main() {
 		}
 
 		if workerKey < 0 {
-			log.Fatal("Worker \"" + worker["name"].(string) + "\" not found on config file")
+			fmt.Println("Worker \"" + worker["name"].(string) + "\" not found on config file")
+			os.Exit(1)
 		}
 
 		config := configs.Workers[workerKey]
@@ -95,7 +98,8 @@ func main() {
 		}
 
 		if fsKey < 0 {
-			log.Fatal("Flight sheet \"" + currentFs["name"].(string) + "\" not found on config file")
+			fmt.Println("Flight sheet \"" + currentFs["name"].(string) + "\" not found on config file")
+			os.Exit(1)
 		}
 
 		currentCoin := config.Coins[fsKey].Tag
@@ -171,7 +175,8 @@ func main() {
 		}
 
 		if newFsName == "" {
-			log.Fatal("flight Sheet not found for coin \"" + bestCoin + "\"")
+			fmt.Println("flight Sheet not found for coin \"" + bestCoin + "\"")
+			os.Exit(1)
 		}
 
 		result := requestHive("GET", "/farms/FARM_ID/fs", nil)
@@ -187,7 +192,8 @@ func main() {
 		}
 
 		if newFsId < 0 {
-			log.Fatal("flight Sheet \"" + newFsName + "\" not found on HiveOS")
+			fmt.Println("flight Sheet \"" + newFsName + "\" not found on HiveOS")
+			os.Exit(1)
 		}
 
 		payload, _ := json.Marshal(map[string]interface{}{
@@ -205,7 +211,8 @@ func requestHive(method string, url string, payload io.Reader) map[string]interf
 	req, err := http.NewRequest(method, "https://api2.hiveos.farm/api/v2"+strings.Replace(url, "FARM_ID", configs.FarmID, 1), payload)
 
 	if err != nil {
-		log.Fatal("Error in communication with HiveOS: ", err)
+		fmt.Println("Error in communication with HiveOS: ", err)
+		os.Exit(1)
 	}
 
 	req.Header = http.Header{
@@ -215,12 +222,14 @@ func requestHive(method string, url string, payload io.Reader) map[string]interf
 
 	res, err := client.Do(req)
 	if err != nil {
-		log.Fatalln(err)
+		fmt.Println(err)
+		os.Exit(1)
 	}
 
 	body, err := ioutil.ReadAll(res.Body)
 	if err != nil {
-		log.Fatalln(err)
+		fmt.Println(err)
+		os.Exit(1)
 	}
 
 	var result map[string]interface{}
@@ -233,14 +242,16 @@ func request(url string) map[string]interface{} {
 	resp, err := http.Get(url)
 
 	if err != nil {
-		log.Fatal("Error in communication with "+url+": ", err)
+		fmt.Println("Error in communication with "+url+": ", err)
+		os.Exit(1)
 	}
 
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
 
 	if err != nil {
-		log.Fatalln(err)
+		fmt.Println(err)
+		os.Exit(1)
 	}
 
 	var result map[string]interface{}
