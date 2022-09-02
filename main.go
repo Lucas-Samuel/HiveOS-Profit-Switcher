@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"sort"
 	"strconv"
 	"strings"
@@ -40,7 +41,14 @@ type Coins []struct {
 var configs Configs
 
 func (configs *Configs) load() {
-	content, err := ioutil.ReadFile("configs.json")
+	ex, err := os.Executable()
+
+	if err != nil {
+		fmt.Println("Path not found: ", err)
+		os.Exit(1)
+	}
+
+	content, err := ioutil.ReadFile(path.Dir(ex) + "/configs.json")
 
 	if err != nil {
 		fmt.Println("Error when opening config file: ", err)
@@ -121,7 +129,7 @@ func main() {
 		for _, coin := range coins {
 			coin := coin.(map[string]interface{})
 
-			btcRevenue, _ := strconv.ParseFloat(coin["btc_revenue24"].(string), 64)
+			btcRevenue, _ := strconv.ParseFloat(coin["btc_revenue"].(string), 64)
 			algo := strings.ToUpper(coin["algorithm"].(string))
 
 			if algo == "ETHASH" && coin["tag"] != "ETH" && coin["tag"] != "NICEHASH" {
