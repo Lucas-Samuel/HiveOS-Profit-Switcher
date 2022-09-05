@@ -4,6 +4,16 @@ This is a app inspired by [TheRetroMike's HiveOSProfitSwitcher](https://github.c
 Make sure you configure overclock defaults for each algorithm to optimize your cards and prevent crashes. This Profit switcher doesn't apply overclocks itself, but overclocks will get reapplied by hive os if you configure algo default ones when this tool applies the flightsheet changes.
 
 ## How To Use
+Simple
+```bash
+# Download and install the app
+$ curl https://raw.githubusercontent.com/Lucas-Samuel/HiveOS-Profit-Switcher/master/installer.sh
+
+# Edit the configs.json whit yours keys and save
+$ nano /usr/profit-switcher/configs.json
+```
+
+Step by step
 ```bash
 # Download the app
 $ wget https://github.com/Lucas-Samuel/HiveOS-Profit-Switcher/releases/latest/download/HiveOS-Profit-Switcher.zip
@@ -17,9 +27,8 @@ $ chmod +x /usr/profit-switcher/switcher
 # Edit the configs.json whit yours keys and save
 $ nano /usr/profit-switcher/configs.json
 
-# Add the following line to the end of the crontab file and save
-# */5 * * * * /usr/profit-switcher/switcher >> /usr/profit-switcher/switcher.log
-$ crontab -e
+# Make the app run at every 5th minute
+$ (crontab -l ; echo "*/5 * * * * /usr/profit-switcher/switcher >> /usr/profit-switcher/switcher.log") | crontab -
 
 # You can execute the app manually by running
 $ /usr/profit-switcher/switcher
