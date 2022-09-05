@@ -7,7 +7,7 @@ Make sure you configure overclock defaults for each algorithm to optimize your c
 Simple
 ```bash
 # Download and install the app
-$ curl https://raw.githubusercontent.com/Lucas-Samuel/HiveOS-Profit-Switcher/master/installer.sh
+$ curl https://raw.githubusercontent.com/Lucas-Samuel/HiveOS-Profit-Switcher/master/installer.sh | bash
 
 # Edit the configs.json whit yours keys and save
 $ nano /usr/profit-switcher/configs.json
