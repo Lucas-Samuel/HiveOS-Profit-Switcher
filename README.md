@@ -39,6 +39,10 @@ $ /usr/profit-switcher/switcher
 - api_key = Hive OS API Key (You can get this by logging into your account, clicking your username at the top right, selecting the Sessions tab, and then creating a new API token)
 - farm_id = Hive OS Farm ID (You can get this from your farm URL)
 - coin_diference = This is the profit percentage difference that is needed in order for the coin to switch.
+- change_type = The change type to be used. Possible values: best_coin, best_nicehash, best_flight_sheet. Default: best_coin.
+    best_coin: Switch to the best currency found on WhatToMine.
+    best_nicehash: Switch only in NiceHash algos.
+    best_flight_sheet: Switch to the best configured Flight sheet.
 - wtm_endpoint = WhatToMine JSON (Go to WhatToMine, fill in your hashrates, hit calculate, then click JSON at the top, and copy the URL from the address bar)
 
 Note: Set "Average for Revenue" to "Current Values" in WhatToMine before copying the URL if you want real-time profitability that auto-adjusts for real-time difficulty changes.
@@ -48,6 +52,7 @@ Note: Set "Average for Revenue" to "Current Values" in WhatToMine before copying
   "api_key": "xxxx",
   "farm_id": "xxxx",
   "coin_diference": "5",
+  "change_type": "best_coin",
   "workers": [
     {
       "name": "RIG_01",

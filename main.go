@@ -1,11 +1,13 @@
 package main
 
 import (
+	"archive/zip"
 	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -15,30 +17,36 @@ import (
 	"strings"
 )
 
+// coinsProfit is the list of the possible coins with their profit values
 type coinsProfit struct {
 	tag   string
 	value float64
 }
 
+// Configs contains the keys and information for operation
 type Configs struct {
 	APIKey        string  `json:"api_key"`
 	FarmID        string  `json:"farm_id"`
 	CoinDiference string  `json:"coin_diference"`
+	ChangeType    string  `json:"change_type"`
 	Workers       Workers `json:"workers"`
 }
 
+// Workers is the list of workers in HiveOS
 type Workers []struct {
 	Name        string `json:"name"`
 	WtmEndpoint string `json:"wtm_endpoint"`
 	Coins       Coins  `json:"coins"`
 }
 
+// Coins is the list of coins and their flight sheet
 type Coins []struct {
 	Tag string `json:"tag"`
 	Fs  string `json:"fs"`
 }
 
 var configs Configs
+var version = "v0.0.4"
 
 func (configs *Configs) load() {
 	ex, err := os.Executable()
@@ -49,6 +57,7 @@ func (configs *Configs) load() {
 	}
 
 	content, err := ioutil.ReadFile(path.Dir(ex) + "/configs.json")
+	// content, err := ioutil.ReadFile("configs.json")
 
 	if err != nil {
 		fmt.Println("Error when opening config file: ", err)
@@ -91,7 +100,7 @@ func main() {
 
 		if workerKey < 0 {
 			fmt.Println("Worker \"" + worker["name"].(string) + "\" not found on config file")
-			os.Exit(1)
+			continue
 		}
 
 		config := configs.Workers[workerKey]
@@ -107,7 +116,7 @@ func main() {
 
 		if fsKey < 0 {
 			fmt.Println("Flight sheet \"" + currentFs["name"].(string) + "\" not found on config file")
-			os.Exit(1)
+			continue
 		}
 
 		currentCoin := config.Coins[fsKey].Tag
@@ -156,20 +165,68 @@ func main() {
 			}
 		}
 
+		if len(profits) == 0 {
+			fmt.Println("Profits not found")
+			continue
+		}
+
 		sort.SliceStable(profits, func(i, j int) bool {
 			return profits[i].value > profits[j].value
 		})
 
-		bestCoin := profits[0].tag
-		bestCoinPrice := profits[0].value
+		var bestCoin string
+		var bestCoinPrice float64
+
+		if configs.ChangeType == "best_nicehash" {
+			var profitsNiceHash []coinsProfit
+
+			for _, pCoin := range profits {
+				if !strings.Contains(pCoin.tag, "NICEHASH") {
+					continue
+				}
+
+				profitsNiceHash = append(profitsNiceHash, pCoin)
+			}
+
+			if len(profitsNiceHash) == 0 {
+				fmt.Println("Profits for NiceHash not found")
+				continue
+			}
+
+			profits = profitsNiceHash
+		} else if configs.ChangeType == "best_flight_sheet" {
+			var profitsInConfig []coinsProfit
+
+			for _, pCoin := range profits {
+				for _, cCoin := range config.Coins {
+					if pCoin.tag == cCoin.Tag {
+						profitsInConfig = append(profitsInConfig, pCoin)
+					}
+				}
+			}
+
+			if len(profitsInConfig) == 0 {
+				fmt.Println("Profits not found for any flight sheets configured")
+				continue
+			}
+
+			profits = profitsInConfig
+		}
+
+		bestCoin = profits[0].tag
+		bestCoinPrice = profits[0].value
+
+		if bestCoin == "" {
+			fmt.Println("Best coin not found")
+			continue
+		}
 
 		coinDiference, _ := strconv.ParseFloat(configs.CoinDiference, 32)
-
 		currentCoinPrice += currentCoinPrice * (coinDiference / 100)
 
 		if bestCoin == currentCoin || bestCoinPrice < currentCoinPrice {
-			fmt.Println("Already in best coin")
-			os.Exit(0)
+			fmt.Println("Already in best coin " + currentCoin)
+			continue
 		}
 
 		var newFsId float64 = -1
@@ -184,7 +241,7 @@ func main() {
 
 		if newFsName == "" {
 			fmt.Println("flight Sheet not found for coin \"" + bestCoin + "\"")
-			os.Exit(1)
+			continue
 		}
 
 		result := requestHive("GET", "/farms/FARM_ID/fs", nil)
@@ -201,7 +258,7 @@ func main() {
 
 		if newFsId < 0 {
 			fmt.Println("flight Sheet \"" + newFsName + "\" not found on HiveOS")
-			os.Exit(1)
+			continue
 		}
 
 		payload, _ := json.Marshal(map[string]interface{}{
@@ -212,6 +269,8 @@ func main() {
 
 		fmt.Println("Worker \""+worker["name"].(string)+"\" flight Sheet updated to \""+newFsName+"\". Estimated profit in 24h: $", bestCoinPrice)
 	}
+
+	checkUpdate()
 }
 
 func requestHive(method string, url string, payload io.Reader) map[string]interface{} {
@@ -266,4 +325,87 @@ func request(url string) map[string]interface{} {
 	json.Unmarshal([]byte(body), &result)
 
 	return result
+}
+
+func checkUpdate() {
+	resp, err := http.Get("https://api.github.com/repos/Lucas-Samuel/HiveOS-Profit-Switcher/tags")
+
+	if err != nil {
+		fmt.Println("Error in communication with github: ", err)
+		os.Exit(1)
+	}
+
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	var result []map[string]interface{}
+	json.Unmarshal([]byte(body), &result)
+
+	lastVersion := result[0]["name"].(string)
+
+	if lastVersion == version {
+		// fmt.Println("Already in the last version")
+		return
+	}
+
+	response, err := http.Get("https://github.com/Lucas-Samuel/HiveOS-Profit-Switcher/releases/latest/download/HiveOS-Profit-Switcher.zip")
+	if err != nil {
+		fmt.Printf("err: %s", err)
+	}
+
+	defer response.Body.Close()
+
+	if response.StatusCode != 200 {
+		return
+	}
+
+	out, err := os.Create("download.zip")
+	if err != nil {
+		fmt.Printf("err: %s", err)
+	}
+	defer out.Close()
+
+	io.Copy(out, response.Body)
+
+	r, err := zip.OpenReader("download.zip")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	defer r.Close()
+
+	for _, f := range r.File {
+		if f.Name != "switcher" {
+			continue
+		}
+
+		rc, err := f.Open()
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		out, err := os.Create("switcher_new")
+		if err != nil {
+			fmt.Printf("err as: %s", err)
+		}
+		defer out.Close()
+
+		io.Copy(out, rc)
+
+		rc.Close()
+
+		out.Chmod(0o755)
+
+		break
+	}
+
+	os.Rename("switcher_new", "switcher")
+	os.Remove("download.zip")
+
+	fmt.Println("Updated to " + lastVersion)
 }
