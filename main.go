@@ -46,7 +46,7 @@ type Coins []struct {
 }
 
 var configs Configs
-var version = "v0.0.4"
+var version = "v0.0.5"
 
 func (configs *Configs) load() {
 	ex, err := os.Executable()
@@ -81,10 +81,11 @@ func main() {
 	configs.load()
 
 	var algoMap = map[string]string{
-		"AUTOLYKOS": "al_p", "BEAMHASHIII": "eqb_p", "CORTEX": "cx_p", "CRYPTONIGHTFASTV2": "cnf_p", "CRYPTONIGHTGPU": "cng_p", "CRYPTONIGHTHAVEN": "cnh_p", "CUCKAROO29S": "cr29_p", "CUCKATOO31": "ct31_p", "CUCKATOO32": "ct32_p", "CUCKOOCYCLE": "cc_p", "EQUIHASH (210,9)": "eqa_p", "EQUIHASHZERO": "eqz_p", "ETCHASH": "e4g_p", "ETHASH": "eth_p", "ETHASH4": "e4g_p", "FIROPOW": "fpw_p", "KAWPOW": "kpw_p", "NEOSCRYPT": "ns_p", "OCTOPUS": "ops_p", "PROGPOW": "ppw_p", "PROGPOWZ": "ppw_p", "RANDOMX": "rmx_p", "UBQHASH": "e4g_p", "VERTHASH": "vh_p", "X25X": "x25x_p", "ZELHASH": "zlh_p", "ZHASH": "zh_p",
+		"AUTOLYKOS": "al_p", "BEAMHASHIII": "eqb_p", "CORTEX": "cx_p", "CRYPTONIGHTFASTV2": "cnf_p", "CRYPTONIGHTGPU": "cng_p", "CRYPTONIGHTHAVEN": "cnh_p", "CUCKAROO29S": "cr29_p", "CUCKATOO31": "ct31_p", "CUCKATOO32": "ct32_p", "CUCKOOCYCLE": "cc_p", "EQUIHASH (210,9)": "eqa_p", "EQUIHASHZERO": "eqz_p", "ETCHASH": "e4g_p", "ETHASH": "eth_p", "ETHASH4": "e4g_p", "FIROPOW": "fpw_p", "KAWPOW": "kpw_p", "NEOSCRYPT": "ns_p", "OCTOPUS": "ops_p", "PROGPOW": "ppw_p", "PROGPOWZ": "ppw_p", "RANDOMX": "rmx_p", "UBQHASH": "e4g_p", "VERTHASH": "vh_p", "X25X": "x25x_p", "ZELHASH": "zlh_p", "ZHASH": "zh_p", "KHEAVYHASH": "hh_p",
 	}
 
-	result := requestHive("GET", "/farms/FARM_ID/workers", nil)
+	result := requestHive("GET", "/farms/FARM_ID/workers/preview", nil)
+
 	data := result["data"].([]interface{})
 
 	for _, value := range data {
@@ -103,8 +104,26 @@ func main() {
 			continue
 		}
 
+		workerId := strconv.Itoa(int(worker["id"].(float64)))
 		config := configs.Workers[workerKey]
-		currentFs := worker["flight_sheet"].(map[string]interface{})
+
+		var currentCoin string
+		var currentFs map[string]interface{}
+
+		if workerFs, ok := worker["flight_sheet"]; ok {
+			currentFs = workerFs.(map[string]interface{})
+		} else {
+			resultWorker := requestHive("GET", "/farms/FARM_ID/workers/"+workerId, nil)
+
+			if workerFs, ok := resultWorker["flight_sheet"]; ok {
+				currentFs = workerFs.(map[string]interface{})
+			}
+		}
+
+		if len(currentFs) == 0 {
+			fmt.Println("Unable to determine current flight sheet for worker" + worker["name"].(string))
+			continue
+		}
 
 		var fsKey int = -1
 		for key, coin := range config.Coins {
@@ -119,7 +138,7 @@ func main() {
 			continue
 		}
 
-		currentCoin := config.Coins[fsKey].Tag
+		currentCoin = config.Coins[fsKey].Tag
 
 		resultBtc := request("https://api.coindesk.com/v1/bpi/currentprice.json")
 		btcPrice := resultBtc["bpi"].(map[string]interface{})["USD"].(map[string]interface{})["rate_float"].(float64)
@@ -145,7 +164,11 @@ func main() {
 				algo = "ETHASH4"
 			}
 
-			consumption, _ := strconv.ParseFloat(params["factor["+algoMap[algo]+"]"][0], 64)
+			var consumption float64
+
+			if factor, ok := params["factor["+algoMap[algo]+"]"]; ok {
+				consumption, _ = strconv.ParseFloat(factor[0], 64)
+			}
 
 			dailyPowerCost := 24 * (consumption / 1000) * powerCost
 			dailyRevenue := btcRevenue * btcPrice
@@ -240,7 +263,7 @@ func main() {
 		}
 
 		if newFsName == "" {
-			fmt.Println("flight Sheet not found for coin \"" + bestCoin + "\"")
+			fmt.Println("flight Sheet for coin \"" + bestCoin + "\" not found in configs file")
 			continue
 		}
 
@@ -265,7 +288,7 @@ func main() {
 			"fs_id": newFsId,
 		})
 
-		requestHive("PATCH", "/farms/FARM_ID/workers/"+strconv.Itoa(int(worker["id"].(float64))), bytes.NewBuffer(payload))
+		requestHive("PATCH", "/farms/FARM_ID/workers/"+workerId, bytes.NewBuffer(payload))
 
 		fmt.Println("Worker \""+worker["name"].(string)+"\" flight Sheet updated to \""+newFsName+"\". Estimated profit in 24h: $", bestCoinPrice)
 	}
@@ -364,7 +387,7 @@ func checkUpdate() {
 		return
 	}
 
-	out, err := os.Create("download.zip")
+	out, err := os.Create("update.zip")
 	if err != nil {
 		fmt.Printf("err: %s", err)
 	}
@@ -372,7 +395,7 @@ func checkUpdate() {
 
 	io.Copy(out, response.Body)
 
-	r, err := zip.OpenReader("download.zip")
+	r, err := zip.OpenReader("update.zip")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -405,7 +428,7 @@ func checkUpdate() {
 	}
 
 	os.Rename("switcher_new", "switcher")
-	os.Remove("download.zip")
+	os.Remove("update.zip")
 
 	fmt.Println("Updated to " + lastVersion)
 }
